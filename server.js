@@ -1,50 +1,42 @@
 import express from "express";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { z } from "zod";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+// Railway akan memberikan PORT otomatis melalui process.env.PORT
+const PORT = process.env.PORT || 8000;
 
-// Inisialisasi Server
-const server = new McpServer({
-  name: "Cloud-Gateway",
-  version: "1.0.0"
-});
-
-// Tool 1: Cek Status Server
-server.tool(
-  "check_gateway_status",
-  "Mengecek status apakah cloud gateway aktif",
-  {},
-  async () => {
-    return {
-      content: [{ type: "text", text: "Cloud MCP Gateway aktif dan berjalan lancar di Glitch!" }]
-    };
+// 1. Inisialisasi Server MCP
+const mcpServer = new Server(
+  {
+    name: "mcp-graph-server",
+    version: "1.0.0",
+  },
+  {
+    capabilities: {
+      tools: {}, // Tempat menaruh fungsi kustom Anda nanti
+    },
   }
 );
 
-// Jalur komunikasi SSE untuk Qwen
 let transport = null;
 
+// 2. Jalur endpoint utama untuk koneksi awal MCP
 app.get("/sse", async (req, res) => {
-  console.log("Qwen terhubung");
-  transport = new SSEServerTransport("/message", res);
-  await server.connect(transport);
+  transport = new SSEServerTransport("/messages", res);
+  await mcpServer.connect(transport);
 });
 
-app.post("/message", async (req, res) => {
+// 3. Jalur endpoint untuk menerima pesan/instruksi dari Qwen
+app.post("/messages", async (req, res) => {
   if (transport) {
-    await transport.handlePostMessage(req, res);
+    await transport.handleMessage(req, res);
   } else {
-    res.status(400).send("Koneksi SSE belum dimulai");
+    res.status(400).send("Koneksi transport belum siap");
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Server MCP Berjalan!");
-});
-
+// Start server web
 app.listen(PORT, () => {
-  console.log(`Server aktif di port ${PORT}`);
+  console.log(`Server MCP aktif dan berjalan di port ${PORT}`);
 });
