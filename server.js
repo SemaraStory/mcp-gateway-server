@@ -3,10 +3,9 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 
 const app = express();
-// Railway akan memberikan PORT otomatis melalui process.env.PORT
 const PORT = process.env.PORT || 8000;
 
-// 1. Inisialisasi Server MCP
+// Inisialisasi Server MCP
 const mcpServer = new Server(
   {
     name: "mcp-graph-server",
@@ -14,21 +13,26 @@ const mcpServer = new Server(
   },
   {
     capabilities: {
-      tools: {}, // Tempat menaruh fungsi kustom Anda nanti
+      tools: {}, // Fitur/alat kosong untuk inisialisasi awal
     },
   }
 );
 
 let transport = null;
 
-// 2. Jalur endpoint utama untuk koneksi awal MCP
+// Jalur endpoint utama untuk koneksi awal MCP (SSE)
 app.get("/sse", async (req, res) => {
+  // Wajib memaksa header agar bertipe text/event-stream demi kecocokan dengan Qwen
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
   transport = new SSEServerTransport("/messages", res);
   await mcpServer.connect(transport);
 });
 
-// 3. Jalur endpoint untuk menerima pesan/instruksi dari Qwen
-app.post("/messages", async (req, res) => {
+// Jalur endpoint untuk menerima pesan/instruksi dari Qwen
+app.post("/messages", express.json(), async (req, res) => {
   if (transport) {
     await transport.handleMessage(req, res);
   } else {
@@ -36,7 +40,12 @@ app.post("/messages", async (req, res) => {
   }
 });
 
-// Start server web
+// Menangani error global agar tidak crash
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).send("Terjadi kesalahan internal pada server MCP");
+});
+
 app.listen(PORT, () => {
   console.log(`Server MCP aktif dan berjalan di port ${PORT}`);
 });
